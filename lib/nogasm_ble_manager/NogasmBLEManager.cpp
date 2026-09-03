@@ -33,14 +33,21 @@ NogasmBLEManager::~NogasmBLEManager()
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
-void NogasmBLEManager::begin(const char* deviceName) // NOLINT(*-convert-member-functions-to-static)
+void NogasmBLEManager::begin(const char* deviceName)  // NOLINT(*-convert-member-functions-to-static)
 {
   NimBLEDevice::init(deviceName);
+  _initialized = true;
   Util::logInfo("Nogasm BLE Manager initialized with name: %s", deviceName);
 }
 
 void NogasmBLEManager::startScan(const uint32_t durationMs)
 {
+  if (!_initialized)
+  {
+    Util::logInfo("Cannot start scan, BLE was never initialized (begin() not called)");
+    return;
+  }
+
   // we can only start scans from idle or failed states
   if (_state != BLE_IDLE && _state != BLE_FAILED)
   {
@@ -245,14 +252,18 @@ void NogasmBLEManager::disconnectAndCleanupClient()
   delay(100);
 }
 
-bool NogasmBLEManager::setVibrationLevel(const uint8_t level) const
+bool NogasmBLEManager::setVibrationLevel(const uint8_t speed)
 {
   if (!_deviceProtocol || !_deviceProtocol->isReady())
   {
     return false;
   }
 
-  return _deviceProtocol->setVibration(level);
+  // Lovense's BLE protocol only supports 20 discrete levels - quantize down
+  // from ArousalManager's full-resolution 0-255 scale (see IDeviceOutput.h's
+  // class comment). Handy doesn't have this limitation, so it skips this.
+  const uint8_t lovenseLevel = Util::mapWithRound(speed, 0, 255, 0, 20);
+  return _deviceProtocol->setVibration(lovenseLevel);
 }
 
 bool NogasmBLEManager::setRotationLevel(const uint8_t level) const
@@ -653,15 +664,16 @@ void NogasmBLEManager::updateStatus(BLEConnectionState newState, const std::stri
     _deviceProtocol->queryDeviceType();
     _deviceProtocol->queryBatteryLevel();
 
-    // vibration test pulse
+    // vibration test pulse - setVibrationLevel() now takes 0-255 raw speed
+    // (see its definition above), so scale these 0-20 level values up first.
     const uint8_t defaultLevel = _config.getDefaultVibrationLevel();
     if (defaultLevel > 0)
     {
-      setVibrationLevel(defaultLevel);
+      setVibrationLevel(Util::mapWithRound(defaultLevel, 0, 20, 0, 255));
     }
     else
     {
-      setVibrationLevel(1);
+      setVibrationLevel(Util::mapWithRound(1, 0, 20, 0, 255));
       delay(200);
       setVibrationLevel(0);
     }

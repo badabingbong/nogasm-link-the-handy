@@ -1,96 +1,82 @@
-# NogasmLink
+# NogasmLink (for the Handy)
 
-An intelligent arousal management system for ESP32 that connects to Lovense devices via Bluetooth LE, using a pressure
-sensor for automated edging control and real-time web monitoring.
+An intelligent arousal management system for ESP32 that reads a pressure sensor to automatically manage an edging
+session, driving [The Handy](https://www.handyfeeling.com) as the output device. Interfaces over **USB serial** to a
+small companion app that runs on your computer - no WiFi setup on the device required.
 
-The inspiration for this project came from the fact that I wanted to build my own `nogasm` but could not source the
-motors required for the vibrator easily, which made me think that I already have lots of lovense devices and they all
-use Bluetooth LE.
+Based on [sgrljess/nogasm-link](https://github.com/sgrljess/nogasm-link), adapted to drive The Handy specifically:
+replaced the ESP32-hosted WiFi dashboard with a USB-serial companion app, added Handy REST API support (with a
+movement-zone randomizer), and switched vibration control to full-resolution speed instead of Lovense's coarser
+20-level scale. The original BLE/Lovense and WiFi-hosted-dashboard code paths are still present and can be re-enabled
+(see `ENABLE_BLE`/`ENABLE_WIFI_WEB_SERVER` in `src/main.cpp`), but are off by default and hidden from the UI.
 
-The standard way of connecting to lovense devices is through [their API](https://developer.lovense.com), _however_,
-using a direct BLE connection does not need to send data back and forth to their servers and the device control is
-**local** only, which is better for privacy and response times. The ESP here essentially acts as the lovense remote app.
+## What you need
 
-This reduces the friction of building the project in my opinion. I'm not that great with PCB design (software is my main
-thing) and my current version is hand soldered. It would be great if the community can help design a solid PCB for this
-project specifically
+- An ESP32 board (developed against an M5Stack Atom Lite)
+- A pressure sensor - an HX710B-based ADC breakout (e.g. an MPX5700GP-based pressure sensor module)
+- A USB cable to your computer (used for both flashing and, afterwards, the live serial link)
+- [The Handy](https://www.handyfeeling.com), connected to WiFi with its own Connection Key
+- A computer to run the companion app + web dashboard on
 
 ## Features
 
 - **Pressure Sensor Integration**: Real-time monitoring with configurable sensitivity
-- **Bluetooth LE Device Control**: Native support for Lovense devices (Nora, Max, Lush, etc.)
 - **Intelligent Edging**: Automated arousal detection with cooldown periods
 - **Clench Detection**: Advanced pressure pattern recognition
-- **Web Interface**: Real-time dashboard with data visualization and device control
-- **Hardware Controls**: Rotary encoder for sensitivity adjustment and emergency stop
-
-## Lovense
-
-The device will automatically reconnect on ble failure, and supports connecting to the last device on startup, which
-allows the UI to be used minimally supporting hands-free use.
-
-Tested and working with:
-
-* Tenera
-* Max
-* Solace
-* Hush _(a bit pointless for this project 🤣)_
+- **The Handy Control**: Full-resolution (0-255) speed control, with independent min/max speed limits and
+  configurable ramp time
+- **Movement Zone Randomization**: Periodically shifts Handy's physical stroke range within a configured band,
+  instead of always using the same fixed range
+- **Web Dashboard**: Real-time data visualization and session control, served locally by the companion app
+- **USB Serial Link**: No WiFi credentials, captive portal, or router quirks to fight with
 
 ## UI
-
-### Scanner
-
-![Scanner](docs/images/device-scanner.png)
 
 ### Session
 
 ![Session](docs/images/session-active.png)
 
-### Analytics
-
-![Analytics](docs/images/analytics.png)
-
-### Config
-
-#### General
-
-![General](docs/images/general-config.png)
-
-#### Clench
-
-![Clench](docs/images/clench-config.png)
 
 ## Credits
 
+- https://github.com/sgrljess/nogasm-link - the project this is based on
 - https://github.com/nogasm/nogasm
 - https://github.com/MausTec/edge-o-matic-3000
 - https://github.com/Edging-Machines/Edging-Machines
 - https://docs.buttplug.io/docs/stpihkal/protocols/lovense/
 
-## Hardware
-
-![schematic](docs/images/schematic.png)
-
 ### Components
 
-- ESP32 development board
-- MPX5700GP pressure sensor
-- Rotary encoder with push button
-- RGB LED (common cathode)
-- Appropriate resistors and breadboard/PCB
+- ESP32 development board (M5Stack Atom Lite)
+- HX710B-based pressure sensor (e.g. MPX5700GP)
+
 
 ### Pin Configuration
 
 ```
-Pressure Sensor: GPIO 34
-Encoder A/B:     GPIO 32/33  
-Encoder Button:  GPIO 35
-RGB LED:         GPIO 25/26/27
+Pressure Sensor SCK: GPIO 32
+Pressure Sensor OUT: GPIO 26
 ```
+
+See `HX710_SCK_PIN`/`HX710_OUT_PIN`/`NEOPIXEL_PIN` in `src/main.cpp` - these match the M5Stack Atom Lite's built-in
+Grove port and onboard LED.
+
+## Architecture
+
+**ESP32 firmware** does the real-time work: reads the pressure sensor, runs the arousal/edging algorithm
+(`ArousalManager`), and talks to a companion app over USB serial (`SerialLink`/`SerialDeviceOutput`) - it tells the
+app "set speed to X", it doesn't call Handy's API itself.
+
+**`laptop-app/`** (Node.js) runs on your computer: hosts the web dashboard locally, makes the actual Handy REST API
+calls (it has real internet access), and runs the movement zone randomizer. See
+[laptop-app/README.md](laptop-app/README.md) for the serial protocol reference and setup details.
+
+**Data flow**: Pressure sensor → `ArousalManager` (state machine) → USB serial → `laptop-app` → Handy REST API,
+mirrored to the web dashboard over WebSocket + REST the whole way.
 
 ## Installation
 
-### 1. Build Web Assets
+### 1. Build the web dashboard
 
 ```bash
 cd webapp
@@ -98,79 +84,58 @@ yarn install
 yarn build
 ```
 
-### 2. Upload Firmware
+This produces `data/`, which both the companion app and (if you re-enable WiFi mode) the ESP32's filesystem image
+use.
+
+### 2. Flash the firmware
+
+Use Platform.io from whever you like to flash eg.
 
 ```bash
-# Install PlatformIO dependencies
-pio lib install
-
-# Build and upload firmware
 pio run --target upload
-
-# Upload filesystem image (includes web assets)
-pio run --target uploadfs
 ```
 
-### 3. Initial Setup
+### 3. Run the companion app
 
-1. Device creates "NogasmLink" WiFi AP on first boot
-2. Connect and configure WiFi credentials
-3. Access web interface at device IP
-4. Pair Lovense device
-
-#### Startup
-
-```text
-[INFO]  Starting up NogasmLink...
-[INFO]  Initializing BLE...
-[INFO]  Nogasm BLE Manager initialized with name: NogasmLink
-[INFO]  WiFi Connected! IP Address: 192.168.0.139
-[INFO]  mDNS responder started, Device can be reached at: NogasmLink.local
-[INFO]  WebSocket server initialized on path: /ws
-[INFO]  HTTP server started @ 8080
-[INFO]  EncoderManager::init -> value:63
-[INFO]  IDLE -> SCANNING :: Start scanning
-[INFO]  SCANNING -> IDLE :: Scan completed
-[INFO]  IDLE -> CONNECTING :: Connecting to device...
-[INFO]  CONNECTING -> FINDING_SERVICE :: connect() success
-[INFO]  FINDING_SERVICE -> CONNECTED :: Connected successfully!
+```bash
+cd laptop-app
+npm install
+npm start
 ```
+
+Close any other program holding the ESP32's serial port first (a `pio device monitor` session, Arduino IDE, etc.) -
+only one process can hold it at a time. See [laptop-app/README.md](laptop-app/README.md) for port auto-detection
+details and troubleshooting.
+
+### 4. Open the dashboard
+
+**http://localhost:3000** (or whatever `PORT` you set). Enter your Handy's Connection Key under the Handy panel and
+hit Save & Connect.
 
 ## Usage
 
-1. **Device Pairing**: Scan and connect via web interface
-2. **Session Control**: Start/stop arousal management from dashboard
-3. **Sensitivity**: Adjust via rotary encoder or web interface
-4. **Emergency Stop**: Press encoder button anytime
-5. **Data Export**: Download session data as CSV
+1. **Connect Handy**: enter its Connection Key in the dashboard's Handy panel
+2. **Session Control**: start/stop the edging session from the dashboard
+3. **Sensitivity**: adjust via the Arousal sensitivity slider
+4. **Movement Zone**: optionally enable randomized stroke-range shifting
+5. **Data Export**: download session data as CSV from the Analytics panel
 
 ## API Overview
 
-### Key Endpoints
-
-```
-GET/POST /api/arousal/status     # Session control
-GET/POST /api/arousal/config     # Configuration
-POST     /api/vibrate            # Device control
-GET      /api/devices            # BLE scanner
-```
+Served locally by `laptop-app` (not the ESP32) at `http://localhost:3000` by default.
 
 ### WebSocket Updates
 
 Real-time data at `/ws`:
 
-- `ble_status`: Device connection state
-- `arousal_status`: Pressure, arousal level, session state
+- `ble_status`: includes Handy connection status (name kept for frontend compatibility with the original WiFi mode)
+- `arousal_status`: pressure, arousal level, session state
 
 ## Configuration Options
 
 - **Arousal Decay Rate**: How quickly arousal decreases (0.1-0.99)
 - **Sensitivity Threshold**: Peak detection sensitivity
 - **Ramp/Cooldown Times**: Speed control and rest periods
+- **Min/Max Vibration Level**: Speed floor and ceiling, independent of ramp time
 - **Clench Detection**: Pressure pattern recognition settings
-
-## Architecture
-
-**Core Components**: ArousalManager, NogasmBLEManager, PressureSensor, EncoderManager, RGBManager, NogasmHttp
-
-**Data Flow**: Pressure sensor → Arousal detection → State machine → Device control → User feedback
+- **Movement Zone**: Outer range, active band width, shift interval, and pause-before-shift (see `laptop-app/`)

@@ -2,7 +2,10 @@
 #define RGB_MANAGER_H
 
 #include <Arduino.h>
+#include <FastLED.h>
 #include <map>
+
+#define ATOM_LITE_LED_COUNT 1
 
 enum class AnimationType
 {
@@ -42,7 +45,7 @@ struct LEDStateConfig
 class RGBManager
 {
  public:
-  RGBManager(uint8_t redPin, uint8_t greenPin, uint8_t bluePin);
+  explicit RGBManager(uint8_t neoPixelPin, uint8_t numLeds = ATOM_LITE_LED_COUNT);
 
   void begin();
   void update();
@@ -57,9 +60,9 @@ class RGBManager
   void setBrightness(uint8_t brightness);  // 0-255
 
  private:
-  uint8_t _redPin;
-  uint8_t _greenPin;
-  uint8_t _bluePin;
+  uint8_t _pin;
+  uint8_t _numLeds;
+  CRGB _leds[ATOM_LITE_LED_COUNT];
 
   LEDState _currentState = LEDState::OFF;
 
@@ -67,7 +70,7 @@ class RGBManager
   unsigned long _animationStartTime = 0;
   unsigned long _animationDuration = 0;
 
-  uint8_t _brightness = 255;
+  uint8_t _brightness = 50;  // SK6812 on Atom Lite is very bright; keep low
 
   uint8_t _red = 0;
   uint8_t _green = 0;
@@ -86,7 +89,7 @@ class RGBManager
   void initStateConfigs();
   void applyStateConfig(const LEDStateConfig& config);
   void updateAnimation();
-  void updateLED() const;
+  void updateLED();
   void restartCurrentAnimation();
 };
 

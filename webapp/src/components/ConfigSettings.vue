@@ -152,6 +152,7 @@ export default {
                 const data = await response.json();
 
                 this.config = {
+                    ...this.config,
                     connection: {
                         scanDuration: data.connection?.scanDuration || this.defaultConfig.connection.scanDuration,
                         connectionTimeout: data.connection?.connectionTimeout || this.defaultConfig.connection.connectionTimeout
@@ -303,6 +304,16 @@ export default {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+}
+
+.switch-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin: -0.5rem 0 1rem;
+}
+
+.switch-description a {
+    color: inherit;
 }
 
 .config-actions {

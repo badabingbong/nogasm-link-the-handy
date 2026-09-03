@@ -1,2 +1,4 @@
 .pio
 data/
+.idea
+.DS_Store

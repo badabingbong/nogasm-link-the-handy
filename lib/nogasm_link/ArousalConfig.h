@@ -8,10 +8,11 @@ struct ArousalConfig
   int minSensitivityWhileDecaying = 40;         // The minimum sensitivity to decay too (0-255)
   int sensitivityThreshold = 70;                // Threshold for peak detection (adc value)
   int maxArousalLimit = 4000;                   // Default pressure limit (adc value)
+  int minSpeed = 0;                             // Minimum vibration speed while running (0-255, pwm value)
   int maxSpeed = 255;                           // Maximum vibration speed (0-255, pwm value)
   int frequency = 60;                           // Update frequency (Hz)
   int targetEdgeCount = 20;                     // Amount of edges before orgasm is allowed
-  float rampTimeSeconds = 50.0;                 // Time to ramp up vibration (seconds)
+  float rampTimeSeconds = 50.0;                 // Time to ramp from minSpeed to maxSpeed (seconds)
   float coolTimeSeconds = 15.0;                 // Time to cool down (seconds)
 
   float clenchPressureThreshold = maxArousalLimit;  // Initial clench threshold

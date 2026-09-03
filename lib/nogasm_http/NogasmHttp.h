@@ -11,13 +11,15 @@
 #include "NogasmConfig.h"
 #include "EncoderManager.h"
 #include "ArousalManager.h"
+#include "HandyOutput.h"
 
 #define NOGASM_HTTP_PORT 8080
 
 class NogasmHttp
 {
  public:
-  NogasmHttp(fs::FS& filesystem, NogasmBLEManager& bleManager, WiFiManager& wifiManager, NogasmConfig& config, ArousalManager& arousalManager, EncoderManager& encoderManager);
+  NogasmHttp(fs::FS& filesystem, NogasmBLEManager& bleManager, WiFiManager& wifiManager, NogasmConfig& config, ArousalManager& arousalManager, EncoderManager& encoderManager,
+    HandyOutput& handyOutput);
 
   void begin();
   void update();
@@ -46,6 +48,7 @@ class NogasmHttp
   NogasmConfig& _config;
   EncoderManager& _encoderManager;
   ArousalManager& _arousalManager;
+  HandyOutput& _handyOutput;
 
   void setupAPIEndpoints();
   void setupStaticFiles();
@@ -70,6 +73,10 @@ class NogasmHttp
   void handleUpdateConfig(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total);
   void handleResetWifi(AsyncWebServerRequest* request) const;
   void handleConnect(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total);
+
+  // API endpoint handlers - Handy configuration
+  void handleGetHandyConfig(AsyncWebServerRequest* request);
+  void handleUpdateHandyConfig(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total);
 
   // API endpoint handlers - arousal control
   void handleGetArousalStatus(AsyncWebServerRequest* request);

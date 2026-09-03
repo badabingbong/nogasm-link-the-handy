@@ -1,7 +1,7 @@
 // ReSharper disable CppExpressionWithoutSideEffects
 #include "ArousalManager.h"
 
-ArousalManager::ArousalManager(PressureSensor& sensor, NogasmBLEManager& bleManager) : _pressureSensor(sensor), _bleManager(bleManager)
+ArousalManager::ArousalManager(PressureSensor& sensor, IDeviceOutput& deviceOutput) : _pressureSensor(sensor), _deviceOutput(deviceOutput)
 {
   _arousalLimit = _config.maxArousalLimit;
 }
@@ -29,6 +29,12 @@ void ArousalManager::reset()
   _limitExceeded = false;
   _limitExceededTime = 0;
   _limitExceededCounter = 0;
+
+  // Force the next updateVibrationLevel() call to actually transmit rather
+  // than assuming the device is already at whatever we last sent - the
+  // device output (e.g. the Handy zone randomizer) can change the real
+  // device state out-of-band, so our cache can't be trusted across a reset.
+  _lastSentSpeed = 255;
 }
 
 void ArousalManager::begin()
@@ -43,7 +49,10 @@ void ArousalManager::begin()
 void ArousalManager::end()
 {
   _started = false;
-  updateVibrationLevel(0);
+  // Force this stop to actually transmit even if our cache thinks the device
+  // is already at 0 - see the comment in reset() for why that cache can be stale.
+  _lastSentSpeed = 255;
+  updateVibrationLevel(0, 0);
   notifyStateChange(ArousalState::IDLE);
   Util::logDebug("Stopped ArousalManager");
 }
@@ -117,7 +126,10 @@ void ArousalManager::update()
 
   _arousal *= _config.arousalDecayRate;
 
-  const float speedIncrement = (static_cast<float>(_config.maxSpeed) / (static_cast<float>(_config.frequency) * _config.rampTimeSeconds));
+  // Defensive clamp in case minSpeed/maxSpeed were set inconsistently by a config update.
+  const int effectiveMinSpeed = constrain(_config.minSpeed, 0, _config.maxSpeed);
+  const float speedIncrement =
+    (static_cast<float>(_config.maxSpeed - effectiveMinSpeed) / (static_cast<float>(_config.frequency) * _config.rampTimeSeconds));
   const float pressure = _pressureSensor.readSmoothedPressure();
 
   if (!_pressureSensor.isReady())
@@ -190,6 +202,9 @@ void ArousalManager::update()
       else
       {
         _vibrationSpeed = 0;
+        // Force this cutoff to actually transmit even if our cache thinks the
+        // device is already at 0 - see the comment in reset() for why.
+        _lastSentSpeed = 255;
 
         // decay limit each time we exceeded the limit (1.0 to disable this)
         const float newArousalLimit = _arousalLimit * constrain(_config.sensitivityAfterEdgeDecayRate, 0.0f, 1.0f);
@@ -229,17 +244,23 @@ void ArousalManager::update()
   {
     Util::logTrace("ArousalManager::vibration ramping -> %.2f", _vibrationSpeed);
     _vibrationSpeed += speedIncrement;
+    if (_vibrationSpeed < effectiveMinSpeed)
+    {
+      // First tick after starting/cooldown-ending jumps straight to the floor
+      // instead of ramping up from 0, so it never runs below minSpeed while active.
+      _vibrationSpeed = effectiveMinSpeed;
+    }
   }
 
   if (_vibrationSpeed > 0)
   {
-    const uint8_t vibrationLevel = speedToLevel(constrain(_vibrationSpeed, 0, _config.maxSpeed));
-    updateVibrationLevel(vibrationLevel);
+    const uint8_t rawSpeed = constrain(_vibrationSpeed, 0, _config.maxSpeed);
+    updateVibrationLevel(speedToLevel(rawSpeed), rawSpeed);
   }
   else
   {
     _vibrationSpeed = 0;
-    updateVibrationLevel(0);
+    updateVibrationLevel(0, 0);
   }
 }
 
@@ -293,20 +314,30 @@ long ArousalManager::detectClench(const unsigned long currentTime, const float p
   return 0;
 }
 
-void ArousalManager::updateVibrationLevel(const uint8_t level)
+void ArousalManager::updateVibrationLevel(const uint8_t level, const uint8_t rawSpeed)
 {
+  // UI/event state (quantized 0-20) updates whenever the displayed level
+  // changes, independent of whether we actually send anything to the device.
   if (level != _lastVibrationLevel)
   {
     notifyStateChange(ArousalState::VIBRATION_CHANGE);
-    Util::logDebug("ArousalManager::vibration::update -> %d", level);
-
-    if (_bleManager.isConnectedState())
-    {
-      _bleManager.setVibrationLevel(level);
-    }
   }
-
   _lastVibrationLevel = level;
+
+  // The device gets the full-resolution raw speed (0-255), sent whenever it
+  // actually changes - not gated by the coarser quantized level (see
+  // IDeviceOutput's class comment for why).
+  if (rawSpeed != _lastSentSpeed)
+  {
+    Util::logDebug("ArousalManager::vibration::update -> level=%d raw=%d", level, rawSpeed);
+
+    if (_deviceOutput.isConnectedState())
+    {
+      _deviceOutput.setVibrationLevel(rawSpeed);
+    }
+
+    _lastSentSpeed = rawSpeed;
+  }
 }
 
 float ArousalManager::getArousalPercent() const

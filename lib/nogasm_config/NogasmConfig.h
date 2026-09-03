@@ -59,6 +59,13 @@ class NogasmConfig
   String getLastConnectedDevice() const;
   void setLastConnectedDevice(const String &address);
 
+  // The Handy credentials
+  String getHandyConnectionKey() const;
+  void setHandyConnectionKey(const String &key);
+  String getHandyAppKey() const;
+  void setHandyAppKey(const String &key);
+  bool hasHandyCredentials() const;
+
   // Clear all configuration
   void clear();
 
@@ -90,6 +97,10 @@ class NogasmConfig
 
   // Misc
   String _lastConnectedDevice;  // Address of last successfully connected device
+
+  // The Handy credentials
+  String _handyConnectionKey;
+  String _handyAppKey;
 };
 
 #endif

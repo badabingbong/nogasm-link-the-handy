@@ -16,7 +16,7 @@ bool NogasmConfig::load()
   }
 
   size_t size = configFile.size();
-  if (size > 1024)
+  if (size > 2048)
   {
     Util::logDebug("Config file size is too large");
     configFile.close();
@@ -68,6 +68,7 @@ bool NogasmConfig::load()
       _arousalConfig.minSensitivityWhileDecaying = doc["arousal"]["config"]["minSensitivityWhileDecaying"] | 40;
       _arousalConfig.sensitivityThreshold = doc["arousal"]["config"]["sensitivityThreshold"] | 70;
       _arousalConfig.maxArousalLimit = doc["arousal"]["config"]["maxArousalLimit"] | 4000;
+      _arousalConfig.minSpeed = doc["arousal"]["config"]["minSpeed"] | 0;
       _arousalConfig.maxSpeed = doc["arousal"]["config"]["maxSpeed"] | 255;
       _arousalConfig.frequency = doc["arousal"]["config"]["frequency"] | 60;
       _arousalConfig.rampTimeSeconds = doc["arousal"]["config"]["rampTimeSeconds"] | 50.0f;
@@ -79,6 +80,12 @@ bool NogasmConfig::load()
       _arousalConfig.clenchTimeMinThresholdMs = doc["arousal"]["config"]["clenchTimeMinThresholdMs"] | 250;
       _arousalConfig.clenchTimeMaxThresholdMs = doc["arousal"]["config"]["clenchTimeMaxThresholdMs"] | 3500;
     }
+  }
+
+  if (doc["handy"].is<JsonObject>())
+  {
+    _handyConnectionKey = doc["handy"]["connectionKey"] | "";
+    _handyAppKey = doc["handy"]["appKey"] | "";
   }
 
   // Load misc settings
@@ -113,6 +120,7 @@ bool NogasmConfig::save() const
   doc["arousal"]["config"]["sensitivityAfterEdgeDecayRate"] = _arousalConfig.sensitivityAfterEdgeDecayRate;
   doc["arousal"]["config"]["minSensitivityWhileDecaying"] = _arousalConfig.minSensitivityWhileDecaying;
   doc["arousal"]["config"]["maxArousalLimit"] = _arousalConfig.maxArousalLimit;
+  doc["arousal"]["config"]["minSpeed"] = _arousalConfig.minSpeed;
   doc["arousal"]["config"]["maxSpeed"] = _arousalConfig.maxSpeed;
   doc["arousal"]["config"]["frequency"] = _arousalConfig.frequency;
   doc["arousal"]["config"]["rampTimeSeconds"] = _arousalConfig.rampTimeSeconds;
@@ -121,6 +129,9 @@ bool NogasmConfig::save() const
   doc["arousal"]["config"]["clenchPressureSensitivity"] = _arousalConfig.clenchPressureSensitivity;
   doc["arousal"]["config"]["clenchTimeMinThresholdMs"] = _arousalConfig.clenchTimeMinThresholdMs;
   doc["arousal"]["config"]["clenchTimeMaxThresholdMs"] = _arousalConfig.clenchTimeMaxThresholdMs;
+
+  doc["handy"]["connectionKey"] = _handyConnectionKey;
+  doc["handy"]["appKey"] = _handyAppKey;
 
   // Save misc settings
   doc["lastConnectedDevice"] = _lastConnectedDevice;
@@ -272,6 +283,33 @@ void NogasmConfig::setArousalLimit(int limit)
   _arousalLimit = limit;
 }
 
+// The Handy credentials getters/setters
+String NogasmConfig::getHandyConnectionKey() const
+{
+  return _handyConnectionKey;
+}
+
+void NogasmConfig::setHandyConnectionKey(const String &key)
+{
+  _handyConnectionKey = key;
+}
+
+String NogasmConfig::getHandyAppKey() const
+{
+  return _handyAppKey;
+}
+
+void NogasmConfig::setHandyAppKey(const String &key)
+{
+  _handyAppKey = key;
+}
+
+bool NogasmConfig::hasHandyCredentials() const
+{
+  // Application Key is optional - see HandyOutput's class comment.
+  return !_handyConnectionKey.isEmpty();
+}
+
 void NogasmConfig::clearCategory(ConfigCategory category)
 {
   switch (category)
@@ -297,6 +335,7 @@ void NogasmConfig::clearCategory(ConfigCategory category)
       _arousalConfig.sensitivityAfterEdgeDecayRate = 0.99f;
       _arousalConfig.sensitivityThreshold = 70;
       _arousalConfig.maxArousalLimit = 4000;
+      _arousalConfig.minSpeed = 0;
       _arousalConfig.maxSpeed = 255;
       _arousalConfig.frequency = 60;
       _arousalConfig.targetEdgeCount = 20;

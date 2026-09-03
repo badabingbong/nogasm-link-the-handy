@@ -5,6 +5,7 @@
 #include <NimBLEDevice.h>
 #include <NogasmConfig.h>
 #include <DeviceProtocol.h>
+#include <IDeviceOutput.h>
 #include <memory>
 #include <vector>
 #include <functional>
@@ -23,7 +24,7 @@ enum BLEConnectionState
   BLE_RECONNECTING,
 };
 
-enum  CompatibleDeviceProtocol
+enum CompatibleDeviceProtocol
 {
   UNKNOWN,
   LOVENSE
@@ -42,7 +43,7 @@ struct CompatibleDevice
   int8_t rssi = -1;
 };
 
-class NogasmBLEManager
+class NogasmBLEManager : public IDeviceOutput
 {
  public:
   explicit NogasmBLEManager(NogasmConfig& config);
@@ -54,7 +55,8 @@ class NogasmBLEManager
   void stopScan();
 
   // Device control methods
-  bool setVibrationLevel(uint8_t level) const;
+  // IDeviceOutput
+  bool setVibrationLevel(uint8_t speed) override;
   bool setRotationLevel(uint8_t level) const;
   bool changeRotationDirection() const;
   bool setAirLevel(uint8_t level) const;
@@ -68,9 +70,9 @@ class NogasmBLEManager
 
   // Status methods
   BLEConnectionState getState() const;
-  static std::string getStateString(BLEConnectionState state) ;
+  static std::string getStateString(BLEConnectionState state);
   bool isScanning() const;
-  bool isConnectedState() const;
+  bool isConnectedState() const override;
 
   // Connection management
   void update();
@@ -123,6 +125,7 @@ class NogasmBLEManager
 
   // Private members
   NogasmConfig& _config;
+  bool _initialized = false;  // true once begin() has called NimBLEDevice::init()
   BLEConnectionState _state = BLE_IDLE;
   std::vector<CompatibleDevice> _devices;
   CompatibleDevice _currentDevice;

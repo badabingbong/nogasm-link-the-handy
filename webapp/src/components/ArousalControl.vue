@@ -117,6 +117,14 @@
             </div>
 
             <div v-if="configTab === 'general'" class="config-grid">
+                <SliderInput id="minVibrationLevel" v-model="config.minVibrationLevel"
+                             title="The floor for the vibration level while running - it never drops below this until an edge/cooldown stops it"
+                             :min="0" min-title="Off"
+                             :max="20" max-title="Faster">
+                    <template v-slot:label>
+                        Vibration level minimum
+                    </template>
+                </SliderInput>
                 <SliderInput id="maxVibrationLevel" v-model="config.maxVibrationLevel"
                              title="The limit for the vibration level"
                              :min="0" min-title="Off"
@@ -126,7 +134,7 @@
                     </template>
                 </SliderInput>
                 <SliderInput id="rampTimeSeconds" v-model="config.rampTimeSeconds" unit="s"
-                             title="Time it takes the device to reach max speed"
+                             title="Time it takes the device to ramp from the minimum to the maximum vibration level"
                              :min="5" min-title="Shorter"
                              :max="300" max-title="Longer">
                     <template v-slot:label>
@@ -277,6 +285,7 @@ export default {
                 sensitivityThreshold: 70,
                 maxArousalLimit: 4000,
                 maxPressureLimit: 4030,
+                minVibrationLevel: 0,
                 maxVibrationLevel: 20,
                 frequency: 60,
                 rampTimeSeconds: 50.0,
@@ -293,6 +302,7 @@ export default {
                 sensitivityThreshold: 70,
                 maxArousalLimit: 4000,
                 maxPressureLimit: 4030,
+                minVibrationLevel: 0,
                 maxVibrationLevel: 20,
                 frequency: 60,
                 rampTimeSeconds: 50.0,
@@ -442,8 +452,12 @@ export default {
                 }
 
                 const data = await response.json();
-                this.config = {...data};
-                this.defaultConfig = {...data};
+                // Merge onto the existing config rather than replacing it outright -
+                // an incomplete response (e.g. the device hasn't answered a config
+                // request yet) would otherwise wipe every slider to undefined instead
+                // of just leaving whichever fields it actually didn't have.
+                this.config = {...this.config, ...data};
+                this.defaultConfig = {...this.config};
             } catch (error) {
                 this.$emit('send-notification', 'Error fetching arousal config', 'error');
             }

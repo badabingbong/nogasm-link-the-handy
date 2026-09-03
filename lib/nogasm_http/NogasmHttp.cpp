@@ -10,15 +10,16 @@
 #define WS_CLIENT_TIMEOUT_MS 10000            // 10 seconds without pong = dead client
 #define WS_PING_INTERVAL_MS 15000             // Send ping every 15 seconds
 
-NogasmHttp::NogasmHttp(
-  fs::FS &filesystem, NogasmBLEManager &bleManager, WiFiManager &wifiManager, NogasmConfig &config, ArousalManager &arousalManager, EncoderManager &encoderManager)
+NogasmHttp::NogasmHttp(fs::FS &filesystem, NogasmBLEManager &bleManager, WiFiManager &wifiManager, NogasmConfig &config, ArousalManager &arousalManager,
+  EncoderManager &encoderManager, HandyOutput &handyOutput)
     : _server(NOGASM_HTTP_PORT),
       _filesystem(filesystem),
       _bleManager(bleManager),
       _wifiManager(wifiManager),
       _config(config),
       _encoderManager(encoderManager),
-      _arousalManager(arousalManager)
+      _arousalManager(arousalManager),
+      _handyOutput(handyOutput)
 {
   _lastBleUpdate = 0;
   _lastArousalUpdate = 0;
@@ -243,6 +244,9 @@ void NogasmHttp::generateBleStatusJson(T &doc)
 
   // add dynamic values as part of websocket
   doc["wifi"]["rssi"] = WiFi.RSSI();
+
+  doc["handy"]["configured"] = _handyOutput.isConfigured();
+  doc["handy"]["connected"] = _handyOutput.isConnectedState();
 }
 
 template <typename T>
@@ -287,6 +291,7 @@ void NogasmHttp::generateArousalConfigJson(T &doc)
   doc["sensitivityThreshold"] = config.sensitivityThreshold;
   doc["maxPressureLimit"] = _arousalManager.getPressureLimit();
   doc["maxArousalLimit"] = config.maxArousalLimit;
+  doc["minVibrationLevel"] = ArousalManager::speedToLevel(config.minSpeed);
   doc["maxVibrationLevel"] = ArousalManager::speedToLevel(config.maxSpeed);
   doc["frequency"] = config.frequency;
   doc["rampTimeSeconds"] = config.rampTimeSeconds;
@@ -383,6 +388,19 @@ void NogasmHttp::setupAPIEndpoints()
     [this](AsyncWebServerRequest *request, uint8_t *data, const size_t len, const size_t index, const size_t total)
     {
       this->handleUpdateConfig(request, data, len, index, total);
+    });
+
+  _server.on("/api/handy/config", HTTP_GET,
+    [this](AsyncWebServerRequest *request)
+    {
+      this->handleGetHandyConfig(request);
+    });
+
+  _server.on(
+    "/api/handy/config", HTTP_POST, [](AsyncWebServerRequest *request) { /* Empty handler - we'll use the onBody handler */ }, nullptr,
+    [this](AsyncWebServerRequest *request, uint8_t *data, const size_t len, const size_t index, const size_t total)
+    {
+      this->handleUpdateHandyConfig(request, data, len, index, total);
     });
 
   _server.on("/api/reset-wifi", HTTP_POST,
@@ -502,6 +520,53 @@ void NogasmHttp::handleConnect(AsyncWebServerRequest *request, uint8_t *data, si
   sendSuccessResponse(request, true);
 }
 
+void NogasmHttp::handleGetHandyConfig(AsyncWebServerRequest *request)
+{
+  JsonDocument doc;
+
+  doc["connectionKey"] = _config.getHandyConnectionKey();
+  doc["appKey"] = _config.getHandyAppKey();
+  doc["configured"] = _handyOutput.isConfigured();
+  doc["connected"] = _handyOutput.isConnectedState();
+
+  sendJsonResponse(request, doc);
+}
+
+void NogasmHttp::handleUpdateHandyConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
+{
+  JsonDocument doc;
+  const DeserializationError error = deserializeJson(doc, data, len);
+  if (error)
+  {
+    sendSuccessResponse(request, false, "Invalid JSON");
+    return;
+  }
+
+  const String connectionKey = doc["connectionKey"] | "";
+  const String appKey = doc["appKey"] | "";
+
+  _config.setHandyConnectionKey(connectionKey);
+  _config.setHandyAppKey(appKey);
+  const bool saved = _config.save();
+
+  _handyOutput.setKeys(connectionKey, appKey);
+
+  // Try to connect immediately so the UI gets an up-to-date result rather than
+  // waiting for the next periodic retry in HandyOutput::update().
+  bool connected = false;
+  if (_handyOutput.isConfigured())
+  {
+    connected = _handyOutput.begin();
+  }
+
+  JsonDocument responseDoc;
+  responseDoc["success"] = saved;
+  responseDoc["connected"] = connected;
+  responseDoc["message"] = saved ? (connected ? "Handy connected" : "Saved, but could not reach the Handy - check the keys") : "Failed to save configuration";
+
+  sendJsonResponse(request, responseDoc);
+}
+
 void NogasmHttp::handleVibrate(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
 {
   JsonDocument doc;
@@ -525,7 +590,9 @@ void NogasmHttp::handleVibrate(AsyncWebServerRequest *request, uint8_t *data, si
     return;
   }
 
-  const bool success = _bleManager.setVibrationLevel(level);
+  // setVibrationLevel() now takes 0-255 raw speed (see its definition), not
+  // the 0-20 level this manual-control endpoint's request body uses.
+  const bool success = _bleManager.setVibrationLevel(Util::mapWithRound(level, 0, 20, 0, 255));
 
   JsonDocument responseDoc;
   responseDoc["success"] = success;
@@ -869,6 +936,13 @@ void NogasmHttp::handleUpdateArousalConfig(AsyncWebServerRequest *request, uint8
   if (!doc["maxArousalLimit"].isNull())
   {
     config.maxArousalLimit = doc["maxArousalLimit"].as<int>();
+  }
+
+  if (!doc["minVibrationLevel"].isNull())
+  {
+    const int minVibrationLevel = constrain(doc["minVibrationLevel"].as<int>(), 0, SPEED_LEVEL_MAX);
+    config.minSpeed = ArousalManager::levelToSpeed(minVibrationLevel);
+    Util::logTrace("NogasmHttp::minSpeed = %d", config.minSpeed);
   }
 
   if (!doc["maxVibrationLevel"].isNull())

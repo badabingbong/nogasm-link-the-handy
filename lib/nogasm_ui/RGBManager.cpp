@@ -4,7 +4,7 @@
 
 #define RGB_UPDATE_PERIOD 20  // ms
 
-RGBManager::RGBManager(const uint8_t redPin, const uint8_t greenPin, const uint8_t bluePin) : _redPin(redPin), _greenPin(greenPin), _bluePin(bluePin)
+RGBManager::RGBManager(const uint8_t neoPixelPin, const uint8_t numLeds) : _pin(neoPixelPin), _numLeds(numLeds)
 {
   initStateConfigs();
 }
@@ -34,12 +34,11 @@ void RGBManager::initStateConfigs()
 
 void RGBManager::begin()
 {
-  pinMode(_redPin, OUTPUT);
-  pinMode(_greenPin, OUTPUT);
-  pinMode(_bluePin, OUTPUT);
-
+  // SK6812 on M5 Atom Lite is GRB order
+  FastLED.addLeds<SK6812, 27, GRB>(_leds, ATOM_LITE_LED_COUNT);
+  FastLED.setBrightness(_brightness);
   setLEDState(LEDState::OFF);
-  Util::logDebug("RGB LED Manager initialized on pins R:%d G:%d B:%d", _redPin, _greenPin, _bluePin);
+  Util::logDebug("RGB LED Manager (SK6812 NeoPixel) initialized on pin %d", _pin);
 }
 
 void RGBManager::update()
@@ -88,7 +87,6 @@ void RGBManager::setLEDState(const LEDState state)
     }
     else
     {
-      // Ultimate fallback
       setColor(0, 0, 0);
     }
   }
@@ -134,6 +132,7 @@ void RGBManager::setColor(const uint8_t red, const uint8_t green, const uint8_t 
 void RGBManager::setBrightness(const uint8_t brightness)
 {
   _brightness = brightness;
+  FastLED.setBrightness(brightness);
   updateLED();
 }
 
@@ -147,7 +146,6 @@ void RGBManager::updateAnimation()
   {
     case AnimationType::FLASH:
     {
-      // Toggle between target color and off
       const bool isOn = (elapsed / (_animationDuration / 2)) % 2 == 0;
       if (isOn)
       {
@@ -166,9 +164,7 @@ void RGBManager::updateAnimation()
 
     case AnimationType::PULSE:
     {
-      // Calculate brightness based on sine wave
       const float brightness = (sin(progress * 2.0 * PI) + 1.0) / 2.0;
-
       _red = static_cast<uint8_t>(_targetRed * brightness);
       _green = static_cast<uint8_t>(_targetGreen * brightness);
       _blue = static_cast<uint8_t>(_targetBlue * brightness);
@@ -177,9 +173,7 @@ void RGBManager::updateAnimation()
 
     case AnimationType::BREATHE:
     {
-      // Modified sine wave for breathing effect
       const float brightness = pow(sin(progress * PI), 2);
-
       _red = static_cast<uint8_t>(_targetRed * brightness);
       _green = static_cast<uint8_t>(_targetGreen * brightness);
       _blue = static_cast<uint8_t>(_targetBlue * brightness);
@@ -187,19 +181,12 @@ void RGBManager::updateAnimation()
     }
 
     default:
-      // Nothing to do for other animation types
       break;
   }
 }
 
-void RGBManager::updateLED() const
+void RGBManager::updateLED()
 {
-  // Apply brightness to the color values
-  const uint8_t scaledRed = static_cast<uint8_t>(_red * _brightness / 255);
-  const uint8_t scaledGreen = static_cast<uint8_t>(_green * _brightness / 255);
-  const uint8_t scaledBlue = static_cast<uint8_t>(_blue * _brightness / 255);
-
-  analogWrite(_redPin, scaledRed);
-  analogWrite(_greenPin, scaledGreen);
-  analogWrite(_bluePin, scaledBlue);
+  _leds[0] = CRGB(_red, _green, _blue);
+  FastLED.show();
 }

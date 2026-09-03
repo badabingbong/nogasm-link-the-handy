@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include "PressureSensor.h"
-#include "NogasmBLEManager.h"
+#include "IDeviceOutput.h"
 #include "ArousalConfig.h"
 #include "Util.h"
 
@@ -13,7 +13,7 @@
 class ArousalManager
 {
  public:
-  ArousalManager(PressureSensor& sensor, NogasmBLEManager& bleManager);
+  ArousalManager(PressureSensor& sensor, IDeviceOutput& deviceOutput);
 
   void reset();
   void begin();
@@ -123,7 +123,7 @@ class ArousalManager
 
  private:
   PressureSensor& _pressureSensor;
-  NogasmBLEManager& _bleManager;
+  IDeviceOutput& _deviceOutput;
   ArousalConfig _config;
 
   bool _started = false;
@@ -139,7 +139,8 @@ class ArousalManager
   float _lastPressureValue = 0;
   float _peakStart = 0;
   float _vibrationSpeed = 0;
-  uint8_t _lastVibrationLevel = 0;
+  uint8_t _lastVibrationLevel = 0;  // quantized 0-20, only for UI/event reporting now
+  uint8_t _lastSentSpeed = 255;     // raw 0-255, what was actually last sent to the device; 255 = sentinel "never sent"
 
   long _clenchDurationMs = 0;
   unsigned long _clenchStartTime = 0;
@@ -148,7 +149,9 @@ class ArousalManager
   std::function<void(const ArousalStateEvent&)> _stateChangeCallback = nullptr;
 
   long detectClench(unsigned long currentTime, float pressure);
-  void updateVibrationLevel(uint8_t level);
+  // level: quantized 0-20, for UI/event reporting only. rawSpeed: 0-255, what's
+  // actually sent to the device (see IDeviceOutput's class comment for why).
+  void updateVibrationLevel(uint8_t level, uint8_t rawSpeed);
   void notifyStateChange(ArousalState newState, long clenchDuration = 0);
 };
 

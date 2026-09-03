@@ -14,6 +14,7 @@ movement-zone randomizer), and switched vibration control to full-resolution spe
 
 - An ESP32 board (developed against an M5Stack Atom Lite)
 - A pressure sensor - an HX710B-based ADC breakout (e.g. an MPX5700GP-based pressure sensor module)
+- An inflatable plug (just poke a small hole in it and push the sensor tube in)
 - A USB cable to your computer (used for both flashing and, afterwards, the live serial link)
 - [The Handy](https://www.handyfeeling.com), connected to WiFi with its own Connection Key
 - A computer to run the companion app + web dashboard on
@@ -34,7 +35,7 @@ movement-zone randomizer), and switched vibration control to full-resolution spe
 
 ### Session
 
-![Session](docs/images/session-active.png)
+![Session](docs/images/ui.png)
 
 
 ## Credits

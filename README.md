@@ -39,8 +39,8 @@ movement-zone randomizer), and switched vibration control to full-resolution spe
 
 ### Hardware
 
-![Plug](docs/images/plug.png)
-![Sensor](docs/images/sensor.png)
+![Plug](docs/images/plug.jpg)
+![Sensor](docs/images/sensor.jpg)
 
 
 ## Credits

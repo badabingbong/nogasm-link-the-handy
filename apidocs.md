@@ -397,5 +397,3 @@ await fetch(`${API}/hamp/stop`, { method: 'PUT', headers });
 Always check `X-RateLimit-Remaining` and back off when approaching 0.
 
 ---
-
-token: TURGTk1VMDFPVm81VWpCR1JqbEJXRlJUVVVNeU4wSTBSamMjSjVrM0xnN1ZER0J3UzZObkVRYnF3WmxyeHJBQkFCUmUwZ05tVzhyUWtqSQ
